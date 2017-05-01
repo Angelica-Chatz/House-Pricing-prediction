@@ -1,0 +1,105 @@
+---
+output:
+word_document: default
+---
+---
+title: "XYZ House Prices prediction"
+---
+# Amazon Assignment: Machine Learning Summer 2017 Internship
+## House Pricing Prediction
+
+This is a report conscerning the XYZ assignment about Machine Learning Summer 2017 Intern position. It is about UK house pricing prediction. Since we need to predict the house prices , we choose to train a simple linear regression model. However, as the dataset contains only categorical features related to property type, lease duration and location, we assume that our fit-model won't be able to perform well. Parameters such as location, property type and lease duration are taken into consideration when setting a selling price, but there are also other practical conditions such as No of bedrooms, garage etc that in this particular dataset aren't provided. 
+
+To begin with, we will do some data pre-processing to bring our initial dataset and variables in the desirable format. First, we import only the 4 variables that are of interest ("Price","Property_type","Lease_duration","Town_city"). Then we set names to the columns and keep just the year value for the "Date" variable. I chose to create a new dataset, containing only the records of year 2015, as it was impossible to run a 1.6Gb sized dataset (ps: I even used the trial AzureML and couldn't run linear regression algorithm, because of memory exhaustion). After that, I delete the column "Date" as is no longer needed.
+
+Furthermore, in order to save some training time, I decided to recode all the factor variables levels into numeric variables. It's easier, thus faster, for a training algorithm to read and process numeric values than character ones.Especially, for factor "Town_city", I recoded it into 'London, 'Non-London', after spotting that London is by far, the level with the highest frequency, which means the most desirable city to reside. Finally, after checking the "Price" distribution by a histogram plot, I noticed that it is right-skewed, so performed a log-normalization technique. Finally, I checked for missing values and proceeded to the split training-test bootstrap method. The initial dataset was divided into training and test subsamples by 80% and 20% amount respectively.
+    
+```{r, echo=FALSE}
+## Pre-processing
+
+#import dataset
+library("readr")
+
+pp_complete <- read_csv("~/pp-complete.csv", 
+                        col_names = FALSE, col_types = cols(X1 = col_skip(), 
+                                                            X10 = col_skip(), X11 = col_skip(), 
+                                                            X13 = col_skip(), X14 = col_skip(), 
+                                                            X15 = col_skip(), X16 = col_skip(), 
+                                                            X4 = col_skip(), X6 = col_skip(), 
+                                                            X8 = col_skip(), X9 = col_skip()))
+
+# naming columns
+names(pp_complete) <- c("Price", "Date", "Property_type","Lease_duration", "Town_city")
+str(pp_complete)
+
+# keep year value in Date variable
+library(lubridate)
+pp_complete$Date<-year(ymd(pp_complete$Date))
+
+# create the house.csv file which contains only 2015 observations
+house<-subset(pp_complete,Date=='2015')
+
+write.csv(house,"house.csv",row.names = FALSE,col.names=!row.names)
+
+# delete Date variable
+house$Date<-NULL
+
+# remove initial dataset
+rm(pp_complete)
+
+# import new smaller dataset: house
+library(readr)
+house <- read_csv("~/test.csv")
+
+# Spotting the most frequent town/city
+tb <- table(house$Town_city) 
+
+town.order <- tb[order(tb, decreasing = TRUE)] 
+
+# Setting factors and recoding their levels
+house$Town_city<-ifelse(house$Town_city=="LONDON","1","0")
+
+house$Lease_duration<-ifelse(house$Lease_duration=="F","1","0")
+
+house$Property_type<-ifelse(house$Property_type=="D","1",ifelse(house$Property_type=="F", 2,
+                    ifelse(house$Property_type=="O", 3,ifelse(house$Property_type=="S", 4,
+                    ifelse(house$Property_type=="T", 5,0)))))
+
+house[c(2:4)]<-lapply(house[c(2:4)], factor)
+str(house)
+
+# Normalization Price variable
+options(scipen = 999) #remove exponential annotation
+
+library(ggplot2)
+
+ggplot(house, aes(x=Price)) + geom_histogram(col = 'white') + theme_light()
+
+house$Price<-log(house$Price+1)
+
+ggplot(house, aes(x=Price)) + geom_histogram(col = 'white') + theme_light()
+
+# Missing values check
+sum(is.na(house))
+
+# Splitting in train-house datasets (80%,20% respectively) using bootstrap
+house_sampling_vector <- sample(2,nrow(house),replace=TRUE,prob=c(0.8,0.2))
+
+house_train <- house[house_sampling_vector==1,]
+house_test <- house[house_sampling_vector==2,]
+
+## modeling section
+
+# Linear regression
+fit.lm<-lm(Price~.,data = house_train)
+summary(fit.lm)
+
+layout(matrix(c(1,2,3,4), 2, 2, byrow = TRUE))
+plot(fit.lm)
+
+pred.lm<- predict(fit.lm, newdata= house_test)
+(RMSE <- sqrt(mean((house_test$Price-pred.lm)^2)))  #0.59
+```
+ As expected the linear regression model didn't perform well. This happened not only because the dataset lacks of neccesary information but also because all our independent features are categorical. In this case an ensemble model like Random Forest might perform better. Random Forests correct the overfitting produced by Decision Trees, as they blend Decision Trees at training and output the class that is the mean prediction of the individual trees.
+
+
